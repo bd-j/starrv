@@ -4,7 +4,6 @@ from itertools import product
 from copy import deepcopy
 
 import numpy as np
-import matplotlib.pyplot as pl
 import h5py
 
 from sedpy.observate import vac2air
