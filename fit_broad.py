@@ -159,8 +159,8 @@ def run_segment(run_params):
 
 if __name__ == "__main__":
 
-    run_params = {'libname':'/Users/bjohnson/Projects/ckc/ckc/lores/ckc_R10K.h5',
-                  'starlib': '/Users/bjohnson/Projects/psi/data/combined/culled_libv2_w_mdwarfs_w_unc.h5',
+    run_params = {'libname':'data/ckc_R10K.h5',
+                  'starlib': 'data/culled_libv2_w_mdwarfs_w_unc.h5',
                   'version': '',
                   'starid': 0,
                   'wmin': 1.0,

@@ -175,8 +175,8 @@ def run_segment(run_params):
 
 if __name__ == "__main__":
 
-    run_params = {'libname':'/Users/bjohnson/Projects/ckc/ckc/lores/ckc_R10K.h5',
-                  'starlib': '/Users/bjohnson/Projects/psi/data/combined/culled_libv2_w_mdwarfs_w_unc.h5',
+    run_params = {'libname':'data/ckc_R10K.h5',
+                  'starlib': 'data/culled_libv2_w_mdwarfs_w_unc.h5',
                   'version': '',
                   'outname': "results/siglamfit{version}_star{starid}_wlo={wmin:3.2f}_whi={wmax:3.2f}",
                   'starid': 0,
@@ -189,7 +189,7 @@ if __name__ == "__main__":
                   'noise_dilation': 1.0
                   }
 
-    ntry = 5
+    ntry = 10
     stars = np.round(np.linspace(0, 190, ntry)).astype(int)
     optical_wedges = ([0.4, 0.5, 0.6, 0.7],) #MILES optical
     #wedges = ([0.8, 0.9, 1.0, 1.1, 1.2, 1.3], #J

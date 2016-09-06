@@ -18,6 +18,7 @@ def get_stardat(filename, pars=['name', 'miles_id', 'logt', 'logg', 'feh']):
     obs = res['obs']
     return {k: obs.get(k, None) for k in pars}
 
+
 def plot_chains(filenames, outname='tes.pdf', check=False, start=0.5,
                 showpars=['sigma_smooth', 'zred', 'spec_norm']):
     with PdfPages(outname) as pdf:
@@ -33,7 +34,8 @@ def plot_chains(filenames, outname='tes.pdf', check=False, start=0.5,
             if check:
                 # Check for convergence
                 raise(NotImplementedError)
-            
+
+
 def parse_filenames(filenames, **extras):
     linfo = [float(l.replace('star','').replace('wlo=','').replace('whi=',''))
              for f in filenames
@@ -82,7 +84,8 @@ if __name__ == "__main__":
 
     files = glob.glob(outroot)
     #files = files[:40]
-    
+
+    stardata = [get_stardat(f) for f in files]
     starid, wmin, wmax = parse_filenames(files, outroot=outroot)
     results = np.array([process(f, parnames=parnames) for f in files])
 
