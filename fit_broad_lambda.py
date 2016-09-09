@@ -52,7 +52,7 @@ fixed = [('logt', 3.74), ('logg', 4.4), ('feh', 0.0),
          ('logl', 0.0), ('lumdist', 1e-5),
          ('smoothtype', 'lambda'), ('fftsmooth', True)]
 for p, v in fixed:
-    pdict = {'name':p, 'N': 1, 'init': v, 'isfree': False}
+    pdict = {'name':p, 'N': 1, 'init': v, 'isfree': False, 'prior_function': priors.tophat}
     model_params.append(pdict)
 
 
@@ -116,15 +116,22 @@ def load_obs(starid=0, starlib='', wmin=0, wmax=np.inf,
     return obs
 
 
-def load_model(stardat, npoly=5, wmin=0, wmax=np.inf, **extras):
+def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
+               fit_starpars=False, sps=None, **extras):
 
     fwhm_irtf = 10.0
     fwhm_miles = 2.54
 
     pnames = [p['name'] for p in model_params]
-    # fix stellar parameters
-    for p in ['logt', 'feh', 'logg']:
+    # setup stellar parameters
+    for (p, d) in [('logt', 0.01), ('feh', 0.2), ('logg', 0.1)]:
         model_params[pnames.index(p)]['init'] = stardat[p]
+        if fit_starpars:
+            mil, mal = sps._libparams[p].min(), sps._libparams[p].max()
+            mi = np.clip(stardat[p] - d, mil, mal)
+            ma = np.clip(stardat[p] + d, mil, mal)
+            model_params[pnames.index(p)]['isfree'] = True
+            model_params[pnames.index(p)]['prior_args'] = {'mini': mi, 'maxi': ma}
 
     # Choose MILES or IRTF
     if wmin > 0.72:
@@ -158,8 +165,14 @@ def run_segment(run_params):
     # Load
     sps = BigStarBasis(use_params=['logt', 'logg', 'feh'], log_interp=True,
                        n_neighbors=1, **run_params)
-    obs = load_obs(sps=sps, **run_params)
-    model = load_model(obs, **run_params)
+    obs = load_obs(**run_params)
+    #Test
+    try:
+        out = sps.get_star_spectrum(**obs)
+    except(ValueError):
+        print("Can't build star {starid} at  logt={logt}, logg={logg}, feh={feh}".format(**obs))
+        return None
+    model = load_model(obs, sps=sps, **run_params)
     # Fit
     tstart = time.time()    
     postkwargs = {'model': model, 'sps': sps, 'obs': obs}
@@ -176,21 +189,27 @@ if __name__ == "__main__":
 
     run_params = {'libname':'data/ckc_R10K.h5',
                   'starlib': 'data/culled_libv2_w_mdwarfs_w_unc.h5',
-                  'version': '',
+                  'version': 'v1',
+                  # object setup
                   'outname': "results/siglamfit{version}_star{starid}_wlo={wmin:3.2f}_whi={wmax:3.2f}",
                   'starid': 0,
                   'wmin': 1.0,
                   'wmax': 1.1,
+                  # fit setup
                   'npoly': 4,
+                  'fit_starpars': False,
+                  # emcee params
                   'nburn': [16, 16, 32, 64, 128],
                   'niter': 512,
                   'nwalkers': 32,
                   'noise_dilation': 1.0
                   }
 
-    ntry = 10
-    stars = np.round(np.linspace(0, 190, ntry)).astype(int)
-    optical_wedges = ([0.4, 0.5, 0.6, 0.7],) #MILES optical
+    #ntry = 100
+    #stars = np.round(np.linspace(0, 190, ntry)).astype(int)
+    stars = np.arange(25, 100).astype(int)
+    
+    optical_wedges = ([0.40, 0.44, 0.48, 0.52, 0.56, 0.6, 0.64],) #MILES optical
     #wedges = ([0.8, 0.9, 1.0, 1.1, 1.2, 1.3], #J
     #          [1.5, 1.6, 1.7, 1.8],  #H
     #          [2.0, 2.2, 2.45]  #K
@@ -211,6 +230,4 @@ if __name__ == "__main__":
     pool = Pool(6)
     M = pool.map
     M(run_segment, pardictlist)
-        
-    
-    
+
