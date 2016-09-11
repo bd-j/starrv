@@ -38,7 +38,7 @@ norm = {'name': 'spec_norm', 'N': 1,
        #'disp_floor': 0.05,
        'isfree': True,
        'prior_function': priors.tophat,
-       'prior_args': {'mini':-1, 'maxi': 1}}
+       'prior_args': {'mini':-0.5, 'maxi': 0.5}}
 poly = {'name': 'poly_coeffs', 'N': 1,
        'init': 0.0, 'init_disp': [1.0],
        'isfree': True,

@@ -3,9 +3,11 @@ import sys, os, glob
 import numpy as np
 import matplotlib.pyplot as pl
 from matplotlib.backends.backend_pdf import PdfPages
+colors = pl.rcParams['axes.color_cycle']
 
 import prospect.io.read_results as bread
 from prospect.utils import plotting
+from prospect.sources import BigStarBasis
 
 
 tistring = '{filename}={name}, (logt, feh, logg)=({logt:3.2f}, {feh:3.2f}, {logg:3.1f}'
@@ -43,6 +45,9 @@ def plot_chains(filenames, outname='test.pdf', check=False, start=0.5,
 def plot_one_spec(filename, sps=None):
     res, pr, mod = bread.results_from(filename)
     obs = res['obs']
+    if sps is None:
+        sps = BigStarBasis(use_params=['logt', 'logg', 'feh'], log_interp=True,
+                           n_neighbors=1, **res['run_params'])
     obs.update({'filename': os.path.basename(filename)})
     w, s, u, m = obs['wavelength'], obs['spectrum'], obs['unc'], obs['mask']
     pn, _, best, pcts = plotting.get_stats(res, mod.theta_labels(), start=0.66)
@@ -98,33 +103,9 @@ def plot_orders():
         ax.plot([lo, hi], np.zeros(2) + float(o), '-o')
     return fig, ax, orders
 
-        
-if __name__ == "__main__":
-    colors = pl.rcParams['axes.color_cycle']
-    labeltxt = "#{starid:0.0f}:{name}"
-    resdir = 'results'
-    version = 'v1'
-    outroot = ("{}/siglamfit{}_star*_"
-               "wlo=*_whi=*_mcmc").format(resdir, version)
-    parnames=['sigma_smooth', 'zred']
-    parlabel=['R (FWHM)', 'v (km/s)']
 
-    files = glob.glob(outroot)
-    #files = files[:40]
-
-    stardata = [get_stardat(f) for f in files]
-    starid, wmin, wmax = parse_filenames(files, outroot=outroot)
-    results = np.array([process(f, parnames=parnames) for f in files])
-
-    results[:,:,1] *= 2.998e5
-    if 'lam' in outroot:
-        parlabel[0] = "$\Delta\lambda$ (FWHM)"
-        #results[:,:,0] *= 2.355
-        results[:,:,0] = np.sqrt((2.355*results[:,:,0])**2 + (((wmin+wmax)/2.0 * 1e4 /1e4)**2)[:,None])
-    else:
-        results[:,:,0] = 1/np.sqrt( (2.355/results[:,:,0])**2 + (1.0/1e4)**2)
-
-    fig, axes = pl.subplots(2, 1)
+def plot_blocks(results, stardata, starid, wmin, wmax, parnames=None):
+    fig, axes = pl.subplots(results.shape[-1], 1)
     #sys.exit()
     for i, par in enumerate(parnames):
         ax = axes.flat[i]
@@ -136,11 +117,81 @@ if __name__ == "__main__":
                  ylo=results[sel, 1, i], yhi=results[sel, 3, i],
                  label=labeltxt.format(**dat),
                  ax=ax, linewidth=2, color=colors[ np.mod(j, 9)])
-        ax.set_ylabel(parlabel[i])
-
-    axes[1].set_xlabel('$\lambda (micron)$')
+    axes[-1].set_xlabel('$\lambda (micron)$')
     axes[1].axhline(0.0, linestyle=':', linewidth=2.0, color='k')
     axes[0].axhline(2.54, linestyle=':', linewidth=2.0, color='k', label='Beifiore')
-    [ax.legend(loc=0, prop={'size':8}) for ax in axes.flat]
-    fig.show()
-    #step(results
+    #[ax.legend(loc=0, prop={'size':8}) for ax in axes.flat]
+    return fig, axes
+
+
+def summary_stats(results):
+    summary = np.zeros([4, results.shape[-1]])
+    values = np.squeeze(results[:,0,:])
+    sigmas = np.squeeze(results[:,3,:] - results[:,1,:]) / 2
+    summary[0, :] = np.average(values, weights=1.0 / sigmas**2, axis=0,)
+    summary[1, :] = np.sqrt(1 / np.sum(1/sigmas**2, axis=0))
+    summary[2, :] = np.nanmedian(values, axis=0)
+    summary[3, :] = np.nanstd(values, axis=0)
+    return summary
+
+
+def plot_ensemble(results, wmin, wmax, parnames=None, simple=False, **extras):
+
+    ind = 2 * int(simple)
+    print(ind)
+    fig, axes = pl.subplots(results.shape[-1], 1)
+    for j, wlo in enumerate(np.unique(wmin)):
+        sel = wmin == wlo
+        summary = summary_stats(results[sel])
+        print(summary[ind:ind+1,0])
+        for i, par in enumerate(parnames):
+            step([wmin[sel][0]], [wmax[sel][0]], [summary[ind, i]],
+                 ylo=[summary[ind, i] - summary[ind+1,i]],
+                 yhi=[summary[ind, i] + summary[ind+1,i]],
+                 ax=axes.flat[i], linewidth=2, color=colors[0])
+    axes[-1].set_xlabel('$\lambda (micron)$')
+    axes[1].axhline(0.0, linestyle=':', linewidth=2.0, color='k')
+    axes[0].axhline(2.54, linestyle=':', linewidth=2.0, color='k', label='Beifiore')
+    return fig, axes
+
+
+if __name__ == "__main__":
+    labeltxt = "#{starid:0.0f}:{name}"
+    resdir = 'results'
+    version = 'v1'
+    outroot = ("{}/siglamfit{}_star*_"
+               "wlo=*_whi=*_mcmc").format(resdir, version)
+    parnames=['sigma_smooth', 'zred', 'spec_norm']
+    parlabel=['R (FWHM)', 'v (km/s)', 'ln C']
+
+    files = glob.glob(outroot)
+    #files = files[:40]
+
+    # Get info for each segment/star
+    results = np.array([process(f, parnames=parnames) for f in files])
+    stardata = [get_stardat(f) for f in files]
+    starid, wmin, wmax = parse_filenames(files, outroot=outroot)
+    logt = np.array([d['logt'] for d in stardata])
+    #for d, i, wlo, whi in zip(stardata, starid, wmin, wmax):
+    #    d['starid'] = i
+    #    d['wmin'] = wlo
+    #    d['wmax'] = whi
+        
+
+    # convert results units
+    results[:,:,1] *= 2.998e5
+    if 'lam' in outroot:
+        parlabel[0] = "$\Delta\lambda$ (FWHM)"
+        #results[:,:,0] *= 2.355
+        results[:,:,0] = np.sqrt((2.355*results[:,:,0])**2 + (((wmin+wmax)/2.0 * 1e4 /1e4)**2)[:,None])
+    else:
+        results[:,:,0] = 1/np.sqrt( (2.355/results[:,:,0])**2 + (1.0/1e4)**2)
+
+    # Make summary plots
+    #bfig, baxes = plot_blocks(results[:nshow], stardata[:nshow], starid[:nshow],
+    #                          wmin[:nshow], wmax[:nshow], parnames=parnames)
+    #[ax.set_ylabel(parlabel[i]) for i, ax in enumerate(baxes.flat)]
+    warm = (logt > 3.6) & (logt < np.log10(6300))
+    simple = True
+    efig, eaxes = plot_ensemble(results[warm], wmin[warm], wmax[warm], parnames=parnames, simple=simple)
+    [ax.set_ylabel(parlabel[i]) for i, ax in enumerate(eaxes.flat)]
