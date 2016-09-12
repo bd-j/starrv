@@ -160,7 +160,7 @@ def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
     return SedModel(model_params)
 
 
-def run_segment(run_params):
+def run_segment(run_params, hdf5=None):
     # Setup
     #run_params.update(kwargs)
     outname = run_params.get('outname', None)
@@ -172,18 +172,22 @@ def run_segment(run_params):
     sps = BigStarBasis(use_params=['logt', 'logg', 'feh'], log_interp=True,
                        n_neighbors=1, **run_params)
     obs = load_obs(**run_params)
-    #Test
+    # --- Test and write header info ---
     try:
         out = sps.get_star_spectrum(**obs)
     except(ValueError):
         print("Can't build star {starid} at  logt={logt}, logg={logg}, feh={feh}".format(**obs))
         return None
     model = load_model(obs, sps=sps, **run_params)
-    # Fit
+    if hdf5 is not None:
+        bwrite.write_h5_header(hdf5, run_params, model)
+        bwrite.write_obs_to_h5(hdf5, obs)
+    
+    # --- Fit ----
     tstart = time.time()    
     postkwargs = {'model': model, 'sps': sps, 'obs': obs}
     esampler, _, _ = run_emcee_sampler(lnprobfn, model.initial_theta, model,
-                                       postkwargs=postkwargs, **run_params)
+                                       postkwargs=postkwargs, hdf5=hdf5, **run_params)
     tsample = time.time() - tstart
     print('took {:.1f}s'.format(tsample))
     # Write
