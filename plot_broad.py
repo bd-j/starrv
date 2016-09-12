@@ -158,7 +158,7 @@ def plot_ensemble(results, wmin, wmax, parnames=None, simple=False, **extras):
 if __name__ == "__main__":
     labeltxt = "#{starid:0.0f}:{name}"
     resdir = 'results'
-    version = 'v1'
+    version = 'v2'
     outroot = ("{}/siglamfit{}_star*_"
                "wlo=*_whi=*_mcmc").format(resdir, version)
     parnames=['sigma_smooth', 'zred', 'spec_norm']
@@ -172,6 +172,8 @@ if __name__ == "__main__":
     stardata = [get_stardat(f) for f in files]
     starid, wmin, wmax = parse_filenames(files, outroot=outroot)
     logt = np.array([d['logt'] for d in stardata])
+    feh = np.array([d['feh'] for d in stardata])
+    logg = np.array([d['logg'] for d in stardata])
     #for d, i, wlo, whi in zip(stardata, starid, wmin, wmax):
     #    d['starid'] = i
     #    d['wmin'] = wlo
@@ -188,10 +190,21 @@ if __name__ == "__main__":
         results[:,:,0] = 1/np.sqrt( (2.355/results[:,:,0])**2 + (1.0/1e4)**2)
 
     # Make summary plots
-    #bfig, baxes = plot_blocks(results[:nshow], stardata[:nshow], starid[:nshow],
-    #                          wmin[:nshow], wmax[:nshow], parnames=parnames)
-    #[ax.set_ylabel(parlabel[i]) for i, ax in enumerate(baxes.flat)]
+    nshow = len(results)
+    bfig, baxes = plot_blocks(results[:nshow], stardata[:nshow], starid[:nshow],
+                              wmin[:nshow], wmax[:nshow], parnames=parnames)
+    [ax.set_ylabel(parlabel[i]) for i, ax in enumerate(baxes.flat)]
     warm = (logt > 3.6) & (logt < np.log10(6300))
     simple = True
     efig, eaxes = plot_ensemble(results[warm], wmin[warm], wmax[warm], parnames=parnames, simple=simple)
     [ax.set_ylabel(parlabel[i]) for i, ax in enumerate(eaxes.flat)]
+
+
+    # Calculate deltas for atmospheric parameters
+
+    aps = ['logt', 'feh', 'logg']
+    apresults = np.array([process(f, parnames=aps) for f in files])
+    delta = np.zeros_like(apresults)
+    for i, p in enumerate(aps):
+        delta[:,:,i] = apresults[:,:,i] - np.array([d[p] for d in stardata])[:, None]
+        

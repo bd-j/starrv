@@ -61,7 +61,11 @@ def lnprobfn(theta, model=None, sps=None, obs=None):
     """
     lnp_prior = model.prior_product(theta)
     if np.isfinite(lnp_prior):
-        spec, phot, _ = model.mean_model(theta, sps=sps, obs=obs)
+        try:
+            spec, phot, _ = model.mean_model(theta, sps=sps, obs=obs)
+        except(ValueError):
+            # couldn't build model
+            return -np.inf
         lnp_spec = lnlike_spec(spec, obs=obs)
         write_log(theta, lnp_prior, lnp_spec, 0.0, 0, 0)
         return lnp_spec + lnp_prior
@@ -124,7 +128,7 @@ def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
 
     pnames = [p['name'] for p in model_params]
     # setup stellar parameters
-    for (p, d) in [('logt', 0.01), ('feh', 0.2), ('logg', 0.1)]:
+    for (p, d, s) in [('logt', 0.03, 0.005), ('feh', 0.3, 0.05), ('logg', 0.2, 0.05)]:
         model_params[pnames.index(p)]['init'] = stardat[p]
         if fit_starpars:
             mil, mal = sps._libparams[p].min(), sps._libparams[p].max()
@@ -132,7 +136,9 @@ def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
             ma = np.clip(stardat[p] + d, mil, mal)
             model_params[pnames.index(p)]['isfree'] = True
             model_params[pnames.index(p)]['prior_args'] = {'mini': mi, 'maxi': ma}
-
+            model_params[pnames.index(p)]['disp_floor'] = s
+            model_params[pnames.index(p)]['init_disp'] = s
+            
     # Choose MILES or IRTF
     if wmin > 0.72:
         # For IRTF we increase the initial guess for the resolution to ~10AA
@@ -189,7 +195,7 @@ if __name__ == "__main__":
 
     run_params = {'libname':'data/ckc_R10K.h5',
                   'starlib': 'data/culled_libv2_w_mdwarfs_w_unc.h5',
-                  'version': 'v1',
+                  'version': 'v2',
                   # object setup
                   'outname': "results/siglamfit{version}_star{starid}_wlo={wmin:3.2f}_whi={wmax:3.2f}",
                   'starid': 0,
@@ -197,17 +203,17 @@ if __name__ == "__main__":
                   'wmax': 1.1,
                   # fit setup
                   'npoly': 4,
-                  'fit_starpars': False,
+                  'fit_starpars': True,
                   # emcee params
-                  'nburn': [16, 16, 32, 64, 128],
+                  'nburn': [16, 16, 32, 64],
                   'niter': 512,
-                  'nwalkers': 32,
+                  'nwalkers': 64,
                   'noise_dilation': 1.0
                   }
 
     #ntry = 100
     #stars = np.round(np.linspace(0, 190, ntry)).astype(int)
-    stars = np.arange(25, 100).astype(int)
+    stars = np.arange(50, 100).astype(int)
     
     optical_wedges = ([0.40, 0.44, 0.48, 0.52, 0.56, 0.6, 0.64],) #MILES optical
     #wedges = ([0.8, 0.9, 1.0, 1.1, 1.2, 1.3], #J
