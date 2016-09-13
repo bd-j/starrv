@@ -222,7 +222,8 @@ if __name__ == "__main__":
                   }
 
     if len(sys.argv) > 1:
-        s1, s2, ncpu = [int(p) for p in sys.argv[1:]]
+        s1, s2, ncpu, niter = [int(p) for p in sys.argv[1:]]
+        run_params['niter'] = niter
     else:
         print('using defaults')
         s1, s2, ncpu = 50, 100, 6
