@@ -42,7 +42,7 @@ def plot_chains(filenames, outname='test.pdf', check=False, start=0.5,
                 # Check for convergence
                 raise(NotImplementedError)
 
-def plot_one_spec(filename, sps=None):
+def plot_one_spec(filename, sps=None, return_residuals=False):
     res, pr, mod = bread.results_from(filename)
     obs = res['obs']
     if sps is None:
@@ -53,11 +53,15 @@ def plot_one_spec(filename, sps=None):
     pn, _, best, pcts = plotting.get_stats(res, mod.theta_labels(), start=0.66)
     best_spec, _, _ = mod.mean_model(best, sps=sps, obs=obs)
     cal = mod._speccal
+    delta = s - best_spec
+    chi = delta / u
+    if return_residuals:
+        return w[m], s[m], delta[m], u[m]
     fig, axes = pl.subplots(3, 1, sharex=True)
     axes[0].plot(w[m], s[m], label='observed')
     axes[0].plot(w[m], best_spec[m], label='model bestfit')
     axes[1].plot(w[m], cal[m], label='bestfit polynomial')
-    axes[2].plot(w[m], (s[m] - best_spec[m] ) /u[m], label='$\chi (obs-mod)$')
+    axes[2].plot(w[m], chi[m], label='$\chi (obs-mod)$')
     [ax.legend(loc=0, prop={'size': 8}) for ax in axes]
     fig.suptitle(tistring.format(**obs))
     return fig, axes
@@ -202,9 +206,10 @@ if __name__ == "__main__":
 
     # Calculate deltas for atmospheric parameters
 
-    aps = ['logt', 'feh', 'logg']
-    apresults = np.array([process(f, parnames=aps) for f in files])
-    delta = np.zeros_like(apresults)
-    for i, p in enumerate(aps):
-        delta[:,:,i] = apresults[:,:,i] - np.array([d[p] for d in stardata])[:, None]
+    if results.shape[-1] > 4:
+        aps = ['logt', 'feh', 'logg']
+        apresults = np.array([process(f, parnames=aps) for f in files])
+        delta = np.zeros_like(apresults)
+        for i, p in enumerate(aps):
+            delta[:,:,i] = apresults[:,:,i] - np.array([d[p] for d in stardata])[:, None]
         
