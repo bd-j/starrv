@@ -12,7 +12,7 @@ from prospect.sources import BigStarBasis
 from prospect.models import priors, SedModel
 from prospect.likelihood import lnlike_spec, write_log
 from prospect.fitting import run_emcee_sampler
-from prospect.io import write_results as bwrite
+from prospect.io import write_results as writer
 
 lsun_cgs = 3.846e33
 pc2cm = 3.085677581467192e18  # in cm
@@ -62,12 +62,14 @@ def lnprobfn(theta, model=None, sps=None, obs=None):
     lnp_prior = model.prior_product(theta)
     if np.isfinite(lnp_prior):
         try:
+            ts = time.time()
             spec, phot, _ = model.mean_model(theta, sps=sps, obs=obs)
+            dt = time.time() - ts
         except(ValueError):
             # couldn't build model
             return -np.inf
         lnp_spec = lnlike_spec(spec, obs=obs)
-        write_log(theta, lnp_prior, lnp_spec, 0.0, 0, 0)
+        write_log(theta, lnp_prior, lnp_spec, 0.0, dt, 0)
         return lnp_spec + lnp_prior
 
     else:
@@ -141,12 +143,13 @@ def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
             
     # Choose MILES or IRTF
     if wmin > 0.72:
-        # For IRTF we increase the initial guess for the resolution to ~10AA
+        # For IRTF we increase the initial guess for the resolution to R~2000 (FWHM)
         ind = pnames.index('sigma_smooth')
-        for q in ['init', 'init_disp', 'disp_floor']:
-            model_params[ind][q] *= fwhm_irtf / fwhm_miles
-        for q in ['mini', 'maxi']:
-            model_params[ind]['prior_args'][q] *= fwhm_irtf / fwhm_miles
+        model_params[ind]['init'] = (wmin / 2000) / 2.355
+        model_params[ind]['init_disp'] = model_params[ind]['init'] / 2.5
+        model_params[ind]['disp_floor'] = model_params[ind]['init'] / 5.0
+        model_params[ind]['prior_args']['mini'] =  model_params[ind]['init'] / 3.0
+        model_params[ind]['prior_args']['maxi'] =  model_params[ind]['init'] * 3.0
 
     # set up polynomial
     pid = pnames.index('poly_coeffs')
@@ -161,17 +164,19 @@ def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
 
 
 def run_segment(run_params, hdf5=None):
-    # Setup
+    # --- Setup ---
     #run_params.update(kwargs)
     outname = run_params.get('outname', None)
     if outname is None:
         outname = ("broad_results/siglamfit{version}_star{starid}_"
                    "wlo={wmin:3.2f}_whi={wmax:3.2f}")
     outroot = outname.format(**run_params)
-    # Load
+
+    # --- Load ---
     sps = BigStarBasis(use_params=['logt', 'logg', 'feh'], log_interp=True,
                        n_neighbors=1, **run_params)
     obs = load_obs(**run_params)
+
     # --- Test and write header info ---
     try:
         out = sps.get_star_spectrum(**obs)
@@ -180,8 +185,8 @@ def run_segment(run_params, hdf5=None):
         return None
     model = load_model(obs, sps=sps, **run_params)
     if hdf5 is not None:
-        bwrite.write_h5_header(hdf5, run_params, model)
-        bwrite.write_obs_to_h5(hdf5, obs)
+        writer.write_h5_header(hdf5, run_params, model)
+        writer.write_obs_to_h5(hdf5, obs)
     
     # --- Fit ----
     tstart = time.time()    
@@ -191,11 +196,12 @@ def run_segment(run_params, hdf5=None):
     tsample = time.time() - tstart
     print('took {:.1f}s'.format(tsample))
     # Write
-    bwrite.write_pickles(run_params, model, obs, esampler, None,
+    writer.write_pickles(run_params, model, obs, esampler, None,
                          tsample=tsample, outroot=outroot)
 
 
 if __name__ == "__main__":
+
 
     run_params = {'libname':'data/ckc_R10K.h5',
                   'starlib': 'data/culled_libv2_w_mdwarfs_w_unc.h5',
@@ -215,29 +221,38 @@ if __name__ == "__main__":
                   'noise_dilation': 1.0
                   }
 
-    #ntry = 100
-    #stars = np.round(np.linspace(0, 190, ntry)).astype(int)
-    stars = np.arange(50, 100).astype(int)
+    if len(sys.argv) > 1:
+        s1, s2, ncpu = [int(p) for p in sys.argv[1:]]
+    else:
+        print('using defaults')
+        s1, s2, ncpu = 50, 100, 6
     
+    stars = np.arange(s1, s2).astype(int)
+
     optical_wedges = ([0.40, 0.44, 0.48, 0.52, 0.56, 0.6, 0.64],) #MILES optical
-    #wedges = ([0.8, 0.9, 1.0, 1.1, 1.2, 1.3], #J
-    #          [1.5, 1.6, 1.7, 1.8],  #H
-    #          [2.0, 2.2, 2.45]  #K
-    #          )
-
-    wedges = optical_wedges
+    #ir_wedges = ([0.8, 0.9, 1.0, 1.1, 1.2, 1.3], #J
+    #             [1.5, 1.6, 1.7, 1.8],  #H
+    #             [2.0, 2.2, 2.45]  #K
+    #             )
     # super-obfuscated code to get a nregions X 2 array with wlo, whi
-    wlims = np.hstack([np.array([wedge[:-1], wedge[1:]]) for wedge in wedges]).T
+    wlims_opt = np.hstack([np.array([wedge[:-1], wedge[1:]]) for wedge in optical_wedges]).T
+    # simple IR limits
+    wlims_ir = np.array([[0.84, 0.88],
+                         [1.17, 1.23], [1.22, 1.3],
+                         [1.52, 1.6], [1.6, 1.7],
+                         [2.2, 2.4]])
 
+    wlims_all = np.vstack([wlims_opt, wlims_ir])
+    
     pardictlist = []
-    for star, (wlo, whi) in product(stars, wlims):
+    for star, (wlo, whi) in product(stars, wlims_ir):
         print(star, wlo, whi)
         pdict = deepcopy(run_params)
         pdict.update({'starid': star, 'wmin': wlo, 'wmax': whi})
         pardictlist.append(pdict)
 
     from multiprocessing import Pool
-    pool = Pool(6)
+    pool = Pool(ncpu)
     M = pool.map
     M(run_segment, pardictlist)
 
