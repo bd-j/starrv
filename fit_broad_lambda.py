@@ -145,7 +145,7 @@ def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
     if wmin > 0.72:
         # For IRTF we increase the initial guess for the resolution to R~2000 (FWHM)
         ind = pnames.index('sigma_smooth')
-        model_params[ind]['init'] = (wmin / 2000) / 2.355
+        model_params[ind]['init'] = (wmin*1e4 / 2000) / 2.355
         model_params[ind]['init_disp'] = model_params[ind]['init'] / 2.5
         model_params[ind]['disp_floor'] = model_params[ind]['init'] / 5.0
         model_params[ind]['prior_args']['mini'] =  model_params[ind]['init'] / 3.0
