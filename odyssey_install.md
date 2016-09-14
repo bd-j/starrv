@@ -49,6 +49,15 @@ or you can copy them from `/n/home02/bdjohnson/regal/starrv/data/`
 
 Move them to
 ``starrv/data/``
+and then we are going to stripe the data directory,
+since we are going to have many many cpus hitting the c3k file.
+In fact we should probably make copies of that file and then stripe it.
+```
+cd starrv
+lfs setstripe -c 10 data/
+```
+
+
 and then run for a set of stars
 ```
 python fit_broad_lambda.py 0 10 20 1024

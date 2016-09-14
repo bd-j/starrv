@@ -66,6 +66,20 @@ def plot_one_spec(filename, sps=None, return_residuals=False):
     fig.suptitle(tistring.format(**obs))
     return fig, axes
 
+
+def residual_stack(files, ax=None, **kwargs):
+    chi = 0
+    for f in files:
+        w, s, d, u = plot_one_spec(f, return_residuals=True)
+        chi += d / u
+
+    chi /= len(files)
+    if ax is not None:
+        ax.plot(w, chi, **kwargs)
+        return ax, w, chi
+    else:
+        return w, chi
+
     
 def parse_filenames(filenames, **extras):
     """Pull out info from the filenames
@@ -123,7 +137,6 @@ def plot_blocks(results, stardata, starid, wmin, wmax, parnames=None):
                  ax=ax, linewidth=2, color=colors[ np.mod(j, 9)])
     axes[-1].set_xlabel('$\lambda (micron)$')
     axes[1].axhline(0.0, linestyle=':', linewidth=2.0, color='k')
-    axes[0].axhline(2.54, linestyle=':', linewidth=2.0, color='k', label='Beifiore')
     #[ax.legend(loc=0, prop={'size':8}) for ax in axes.flat]
     return fig, axes
 
@@ -158,11 +171,11 @@ def plot_ensemble(results, wmin, wmax, parnames=None, simple=False, **extras):
     axes[0].axhline(2.54, linestyle=':', linewidth=2.0, color='k', label='Beifiore')
     return fig, axes
 
-
 if __name__ == "__main__":
     labeltxt = "#{starid:0.0f}:{name}"
     resdir = 'results'
     version = 'v2'
+    show_res = True
     outroot = ("{}/siglamfit{}_star*_"
                "wlo=*_whi=*_mcmc").format(resdir, version)
     parnames=['sigma_smooth', 'zred', 'spec_norm']
@@ -190,6 +203,9 @@ if __name__ == "__main__":
         parlabel[0] = "$\Delta\lambda$ (FWHM)"
         #results[:,:,0] *= 2.355
         results[:,:,0] = np.sqrt((2.355*results[:,:,0])**2 + (((wmin+wmax)/2.0 * 1e4 /1e4)**2)[:,None])
+        if show_res:
+            results[:,:,0] = ((wmin+wmax)/2.0)[:, None] * 1e4 / results[:,:,0]
+            parlabel[0] = 'R (FWHM)'
     else:
         results[:,:,0] = 1/np.sqrt( (2.355/results[:,:,0])**2 + (1.0/1e4)**2)
 
@@ -197,6 +213,10 @@ if __name__ == "__main__":
     nshow = len(results)
     bfig, baxes = plot_blocks(results[:nshow], stardata[:nshow], starid[:nshow],
                               wmin[:nshow], wmax[:nshow], parnames=parnames)
+    if wlim.min() < 0.7:
+        baxes[0].axhline(2.54, linestyle=':', linewidth=2.0, color='k', label='Beifiore')
+    if show_res:
+        baxes[0].axhline(2000, linestyle=':', linewidth=2.0, color='k', label='IRTF')
     [ax.set_ylabel(parlabel[i]) for i, ax in enumerate(baxes.flat)]
     warm = (logt > 3.6) & (logt < np.log10(6300))
     simple = True

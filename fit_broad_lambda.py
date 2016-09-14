@@ -246,7 +246,7 @@ if __name__ == "__main__":
     wlims_all = np.vstack([wlims_opt, wlims_ir])
     
     pardictlist = []
-    for star, (wlo, whi) in product(stars, wlims_ir):
+    for star, (wlo, whi) in product(stars, wlims_all):
         print(star, wlo, whi)
         pdict = deepcopy(run_params)
         pdict.update({'starid': star, 'wmin': wlo, 'wmax': whi})
