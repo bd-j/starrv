@@ -8,7 +8,7 @@ Setup environments
 
 * Download dependencies. In your code directory:
 
-  ```
+  ```bash
   git clone git@github.com:dfm/emcee.git;
   git clone git@github.com:bd-j/sedpy.git;
   git clone git@github.com:bd-j/prospector.git;
@@ -17,14 +17,14 @@ Setup environments
 
 * Get an Anaconda environment (here called ``pro``):
 
-  ```
+  ```bash
   module purge
   module load python
   conda create -n pro --clone="$PYTHON_HOME"
   ```
 
 * Install dependencies in Anaconda environment:
-  ```
+  ```bash
   source activate pro
   cd sedpy; python setup.py install
   cd ../emcee; python setup.py install
@@ -32,7 +32,7 @@ Setup environments
   ```
 
 You might want to add some of these to your bashrc
-```
+```bash
 module load python
 source activate pro #optional
 ```
@@ -50,16 +50,21 @@ or you can copy them from `/n/home02/bdjohnson/regal/starrv/data/`
 Move them to
 ``starrv/data/``
 and then we are going to stripe the data directory,
-since we are going to have many many cpus hitting the c3k file.
-In fact we should probably make copies of that file and then stripe it.
-```
+since we are going to have many many cpus hitting the c3k file every tenth of second or so.
+In fact we should probably make copies of that file as well.
+```bash
 cd starrv
 lfs setstripe -c 10 data/
+for ((i=1; i<=10; i++));
+  do cp "data/ckc_R10K.h5" "data/ckc_R10K_${i}.h5";
+done
 ```
 
 
 and then run for a set of stars
+```bash
+python fit_broad_lambda.py 0 10 20 \
+       --niter=1024 --verbose=False  \
+       --libname=data/ckc_R10K_1.h5
 ```
-python fit_broad_lambda.py 0 10 20 1024
-```
-The numbers are starid_start, starid_end, ncore, niter.  the stars that are run are the integers [starid_start, starid_end).  There are 12 segments per star, so choose the number of stars appropriately for the number of cores.
+The numbers are starid_start, starid_end, ncore.  the stars that are run are the integers [starid_start, starid_end).  There are 12 segments per star, so choose the number of stars appropriately for the number of cores.  The run time per segment is ~1 hour * niter/512 * nwalkers/64 on my laptop - multiply by 5 for AMD cores.

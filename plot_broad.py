@@ -175,12 +175,16 @@ if __name__ == "__main__":
     labeltxt = "#{starid:0.0f}:{name}"
     resdir = 'results'
     version = 'v2'
-    show_res = True
+    show_res = False
     outroot = ("{}/siglamfit{}_star*_"
                "wlo=*_whi=*_mcmc").format(resdir, version)
     parnames=['sigma_smooth', 'zred', 'spec_norm']
     parlabel=['R (FWHM)', 'v (km/s)', 'ln C']
 
+    args = sys.argv
+    if len(args) > 1:
+        show_res = bool(args[1])
+    
     files = glob.glob(outroot)
     #files = files[:40]
 
@@ -213,7 +217,7 @@ if __name__ == "__main__":
     nshow = len(results)
     bfig, baxes = plot_blocks(results[:nshow], stardata[:nshow], starid[:nshow],
                               wmin[:nshow], wmax[:nshow], parnames=parnames)
-    if wlim.min() < 0.7:
+    if wmin.min() < 0.7:
         baxes[0].axhline(2.54, linestyle=':', linewidth=2.0, color='k', label='Beifiore')
     if show_res:
         baxes[0].axhline(2000, linestyle=':', linewidth=2.0, color='k', label='IRTF')
@@ -223,6 +227,10 @@ if __name__ == "__main__":
     efig, eaxes = plot_ensemble(results[warm], wmin[warm], wmax[warm], parnames=parnames, simple=simple)
     [ax.set_ylabel(parlabel[i]) for i, ax in enumerate(eaxes.flat)]
 
+    #residual stack
+    rfig, rax = pl.subplots()
+    for  wlo in np.unique(wmin):
+        _ = residual_stack(np.array(files)[wmin == wlo], ax=rax)
 
     # Calculate deltas for atmospheric parameters
 

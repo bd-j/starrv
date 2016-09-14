@@ -2,20 +2,17 @@ import sys, time
 
 from itertools import product
 from copy import deepcopy
-
 import numpy as np
 import h5py
 
-from sedpy.observate import vac2air
+from starrv import load_obs, lnprobfn
 
 from prospect.sources import BigStarBasis
 from prospect.models import priors, SedModel
-from prospect.likelihood import lnlike_spec, write_log
 from prospect.fitting import run_emcee_sampler
 from prospect.io import write_results as writer
+from prospect.models.model_setup import parse_args
 
-lsun_cgs = 3.846e33
-pc2cm = 3.085677581467192e18  # in cm
 
 # The parameters of interest
 # resolution based on MILES Befiore et al.
@@ -56,72 +53,6 @@ for p, v in fixed:
     model_params.append(pdict)
 
 
-def lnprobfn(theta, model=None, sps=None, obs=None):
-    """Simple likelihood
-    """
-    lnp_prior = model.prior_product(theta)
-    if np.isfinite(lnp_prior):
-        try:
-            ts = time.time()
-            spec, phot, _ = model.mean_model(theta, sps=sps, obs=obs)
-            dt = time.time() - ts
-        except(ValueError):
-            # couldn't build model
-            return -np.inf
-        lnp_spec = lnlike_spec(spec, obs=obs)
-        write_log(theta, lnp_prior, lnp_spec, 0.0, dt, 0)
-        return lnp_spec + lnp_prior
-
-    else:
-        return -np.inf
-
-
-def load_obs(starid=0, starlib='', wmin=0, wmax=np.inf,
-             noise_dilation=1, sps=None, **extras):
-    """Read MILES/IRTF library
-    """
-    #conversion from L_sun/Hz/Lbol to maggies at 10pc
-    conv = np.log(lsun_cgs) - np.log(4 * np.pi) - 2 * np.log(10 * pc2cm)
-    conv += np.log(1e23) - np.log(3631)
-    conv = np.exp(conv)
-    
-    with h5py.File(starlib, 'r') as f:
-        wave = f['wavelengths'][:]
-        spec = f['spectra'][starid, :]
-        unc = f['unc'][starid, :]
-        params = f['parameters'][starid]
-        anc = f['ancillary'][starid]
-    
-    obs = {'starid':starid}
-    for n in anc.dtype.names:
-        obs[n] = anc[n]
-    for n in params.dtype.names:
-        obs[n] = params[n]
-
-    # rectify labels
-    obs['logt'] = np.log10(obs['teff'])
-    obs['luminosity'] = 10**obs['logl']
-    if sps is not None:
-        for n in sps.stellar_pars:
-            mi, ma = sps._libparams[n].min(), sps._libparams[n].max()
-            obs[n] = np.clip(obs[n], mi + 0.01*np.abs(mi), ma - 0.01*np.abs(ma))
-    
-    # Convert to maggies
-    obs['spectrum'] = spec / obs['luminosity'] * conv
-    obs['unc'] = unc / obs['luminosity'] * conv
-    obs['unc'] *= noise_dilation
-    # Fill dictionary
-    obs['wavelength'] = vac2air(wave * 1e4)
-    obs['logl'] = 0.0
-    obs['filters'] = None
-    obs['maggies'] = None
-    obs['maggies_unc'] = None
-    mask = (obs['wavelength'] > wmin*1e4) & (obs['wavelength'] < wmax*1e4)
-    obs['mask'] = mask
-
-    return obs
-
-
 def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
                fit_starpars=False, sps=None, **extras):
 
@@ -130,7 +61,7 @@ def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
 
     pnames = [p['name'] for p in model_params]
     # setup stellar parameters
-    for (p, d, s) in [('logt', 0.03, 0.005), ('feh', 0.3, 0.05), ('logg', 0.2, 0.05)]:
+    for (p, d, s) in [('logt', 0.03, 0.01), ('feh', 0.3, 0.05), ('logg', 0.2, 0.05)]:
         model_params[pnames.index(p)]['init'] = stardat[p]
         if fit_starpars:
             mil, mal = sps._libparams[p].min(), sps._libparams[p].max()
@@ -163,7 +94,9 @@ def load_model(stardat, npoly=5, wmin=0, wmax=np.inf,
     return SedModel(model_params)
 
 
-def run_segment(run_params, hdf5=None):
+def run_segment(run_params):
+    """Run one wave;length segment of one star
+    """
     # --- Setup ---
     #run_params.update(kwargs)
     outname = run_params.get('outname', None)
@@ -171,17 +104,20 @@ def run_segment(run_params, hdf5=None):
         outname = ("broad_results/siglamfit{version}_star{starid}_"
                    "wlo={wmin:3.2f}_whi={wmax:3.2f}")
     outroot = outname.format(**run_params)
-
+    if run_params.get('write_hdf5', False):
+        hdf5 = h5py.File("{}_mcmc.h5".format(outroot), "w")
+    else:
+        hdf5 = None
     # --- Load ---
+    obs = load_obs(**run_params)
     sps = BigStarBasis(use_params=['logt', 'logg', 'feh'], log_interp=True,
                        n_neighbors=1, **run_params)
-    obs = load_obs(**run_params)
 
-    # --- Test and write header info ---
+    # --- Test, setup model, and write header info ---
     try:
         out = sps.get_star_spectrum(**obs)
     except(ValueError):
-        print("Can't build star {starid} at  logt={logt}, logg={logg}, feh={feh}".format(**obs))
+        print("Can't build star {starid} at logt={logt}, logg={logg}, feh={feh}".format(**obs))
         return None
     model = load_model(obs, sps=sps, **run_params)
     if hdf5 is not None:
@@ -190,22 +126,31 @@ def run_segment(run_params, hdf5=None):
     
     # --- Fit ----
     tstart = time.time()    
-    postkwargs = {'model': model, 'sps': sps, 'obs': obs}
+    postkwargs = {'model': model, 'sps': sps, 'obs': obs,
+                  'verbose': run_params.get('verbose', False)}
     esampler, _, _ = run_emcee_sampler(lnprobfn, model.initial_theta, model,
                                        postkwargs=postkwargs, hdf5=hdf5, **run_params)
     tsample = time.time() - tstart
     print('took {:.1f}s'.format(tsample))
-    # Write
-    writer.write_pickles(run_params, model, obs, esampler, None,
-                         tsample=tsample, outroot=outroot)
+    
+    # --- Write ---
+    if hdf5 is not None:
+        writer.write_hdf5(hdf5, run_params, model, obs, esampler, None,
+                          tsample=tsample, outroot=outroot)
+        writer.write_model_pickle(outroot + '_model', model)
+
+    else:
+        writer.write_pickles(run_params, model, obs, esampler, None,
+                             tsample=tsample, outroot=outroot)
 
 
 if __name__ == "__main__":
 
-
-    run_params = {'libname':'data/ckc_R10K.h5',
+    run_params = {'verbose': True,
+                  'libname':'data/ckc_R10K.h5',
                   'starlib': 'data/culled_libv2_w_mdwarfs_w_unc.h5',
                   'version': 'v2',
+                  'write_hdf5': True,
                   # object setup
                   'outname': "results/siglamfit{version}_star{starid}_wlo={wmin:3.2f}_whi={wmax:3.2f}",
                   'starid': 0,
@@ -222,8 +167,8 @@ if __name__ == "__main__":
                   }
 
     if len(sys.argv) > 1:
-        s1, s2, ncpu, niter = [int(p) for p in sys.argv[1:]]
-        run_params['niter'] = niter
+        run_params = parse_args(sys.argv, argdict=run_params)
+        s1, s2, ncpu = [int(p) for p in sys.argv[1:4]]
     else:
         print('using defaults')
         s1, s2, ncpu = 50, 100, 6
@@ -247,7 +192,6 @@ if __name__ == "__main__":
     
     pardictlist = []
     for star, (wlo, whi) in product(stars, wlims_all):
-        print(star, wlo, whi)
         pdict = deepcopy(run_params)
         pdict.update({'starid': star, 'wmin': wlo, 'wmax': whi})
         pardictlist.append(pdict)
