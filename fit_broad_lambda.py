@@ -151,6 +151,7 @@ if __name__ == "__main__":
                   'starlib': 'data/culled_libv2_w_mdwarfs_w_unc.h5',
                   'version': 'v2',
                   'write_hdf5': True,
+                  'interval': 0.2,
                   # object setup
                   'outname': "results/siglamfit{version}_star{starid}_wlo={wmin:3.2f}_whi={wmax:3.2f}",
                   'starid': 0,

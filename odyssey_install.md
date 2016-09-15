@@ -59,7 +59,7 @@ for ((i=1; i<=10; i++));
   do cp "data/ckc_R10K.h5" "data/ckc_R10K_${i}.h5";
 done
 ```
-
+The last command takes a lot of time (and disk space) so it's probably best to just use the files in my data directory.
 
 and then run for a set of stars
 ```bash
