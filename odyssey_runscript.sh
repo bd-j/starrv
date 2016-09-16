@@ -21,7 +21,7 @@ source activate pro
 echo "RUNNING JOB ARRAY ID: " $SLURM_ARRAY_TASK_ID
 start=$((($SLURM_ARRAY_TASK_ID-1)*$spj))
 stop=$(($SLURM_ARRAY_TASK_ID*$spj))
-ind=$(($SLURM_ARRAY_TASK_ID%$ndatafiles))
+ind=$(($SLURM_ARRAY_TASK_ID%$ndatafiles+1))
 libname="data/ckc_R10K_${ind}.h5"
 echo $start
 echo $stop

@@ -104,10 +104,7 @@ def run_segment(run_params):
         outname = ("broad_results/siglamfit{version}_star{starid}_"
                    "wlo={wmin:3.2f}_whi={wmax:3.2f}")
     outroot = outname.format(**run_params)
-    if run_params.get('write_hdf5', False):
-        hdf5 = h5py.File("{}_mcmc.h5".format(outroot), "w")
-    else:
-        hdf5 = None
+
     # --- Load ---
     obs = load_obs(**run_params)
     sps = BigStarBasis(use_params=['logt', 'logg', 'feh'], log_interp=True,
@@ -120,7 +117,8 @@ def run_segment(run_params):
         print("Can't build star {starid} at logt={logt}, logg={logg}, feh={feh}".format(**obs))
         return None
     model = load_model(obs, sps=sps, **run_params)
-    if hdf5 is not None:
+    if run_params.get('write_hdf5', False):
+        hdf5 = h5py.File("{}_mcmc.h5".format(outroot), "w")
         writer.write_h5_header(hdf5, run_params, model)
         writer.write_obs_to_h5(hdf5, obs)
     
