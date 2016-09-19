@@ -1,4 +1,5 @@
 import sys, os, glob
+from copy import deepcopy
 
 import numpy as np
 import matplotlib.pyplot as pl
@@ -11,6 +12,7 @@ from prospect.sources import BigStarBasis
 
 
 tistring = '{filename}={name}, (logt, feh, logg)=({logt:3.2f}, {feh:3.2f}, {logg:3.1f}'
+
 
 def process(filename, parnames=['sigma_smooth', 'zred']):
     """Get stats from the chains for every results file.
@@ -152,32 +154,33 @@ def summary_stats(results):
     return summary
 
 
-def plot_ensemble(results, wmin, wmax, parnames=None, simple=False, **extras):
+def plot_ensemble(results, wmin, wmax, simple=False, **extras):
 
     ind = 2 * int(simple)
     print(ind)
     fig, axes = pl.subplots(results.shape[-1], 1)
+    if not np.iterable(axes):
+        axes = np.array([axes])
     for j, wlo in enumerate(np.unique(wmin)):
         sel = wmin == wlo
         summary = summary_stats(results[sel])
         print(summary[ind:ind+1,0])
-        for i, par in enumerate(parnames):
+        for i, ax  in enumerate(axes.flat):
             step([wmin[sel][0]], [wmax[sel][0]], [summary[ind, i]],
                  ylo=[summary[ind, i] - summary[ind+1,i]],
                  yhi=[summary[ind, i] + summary[ind+1,i]],
-                 ax=axes.flat[i], linewidth=2, color=colors[0])
+                 ax=ax, linewidth=2, color=colors[0])
     axes[-1].set_xlabel('$\lambda (micron)$')
-    axes[1].axhline(0.0, linestyle=':', linewidth=2.0, color='k')
-    axes[0].axhline(2.54, linestyle=':', linewidth=2.0, color='k', label='Beifiore')
     return fig, axes
+
 
 if __name__ == "__main__":
     labeltxt = "#{starid:0.0f}:{name}"
-    resdir = 'results'
-    version = 'v2'
+    resdir = 'results_v3_odyssey'
+    version = 'v3'
     show_res = False
     outroot = ("{}/siglamfit{}_star*_"
-               "wlo=*_whi=*_mcmc").format(resdir, version)
+               "wlo=*_whi=*_mcmc.h5").format(resdir, version)
     parnames=['sigma_smooth', 'zred', 'spec_norm']
     parlabel=['R (FWHM)', 'v (km/s)', 'ln C']
 
@@ -195,26 +198,22 @@ if __name__ == "__main__":
     logt = np.array([d['logt'] for d in stardata])
     feh = np.array([d['feh'] for d in stardata])
     logg = np.array([d['logg'] for d in stardata])
-    #for d, i, wlo, whi in zip(stardata, starid, wmin, wmax):
-    #    d['starid'] = i
-    #    d['wmin'] = wlo
-    #    d['wmax'] = whi
-        
-
+    warm = (logt > 3.6) & (logt < np.log10(6300))
+    
     # convert results units
     results[:,:,1] *= 2.998e5
     if 'lam' in outroot:
         parlabel[0] = "$\Delta\lambda$ (FWHM)"
         #results[:,:,0] *= 2.355
         results[:,:,0] = np.sqrt((2.355*results[:,:,0])**2 + (((wmin+wmax)/2.0 * 1e4 /1e4)**2)[:,None])
-        if show_res:
-            results[:,:,0] = ((wmin+wmax)/2.0)[:, None] * 1e4 / results[:,:,0]
-            parlabel[0] = 'R (FWHM)'
+        results_R, parlabels_R = results.copy(), deepcopy(parlabel)
+        results_R[:,:,0] = ((wmin+wmax)/2.0)[:, None] * 1e4 / results[:,:,0]
+        parlabels_R[0] = r'R = $\bar{\lambda}/(\Delta\lambda)$ (FWHM)'
     else:
         results[:,:,0] = 1/np.sqrt( (2.355/results[:,:,0])**2 + (1.0/1e4)**2)
 
     # Make summary plots
-    nshow = len(results)
+    nshow = 48 #len(results)
     bfig, baxes = plot_blocks(results[:nshow], stardata[:nshow], starid[:nshow],
                               wmin[:nshow], wmax[:nshow], parnames=parnames)
     if wmin.min() < 0.7:
@@ -222,19 +221,32 @@ if __name__ == "__main__":
     if show_res:
         baxes[0].axhline(2000, linestyle=':', linewidth=2.0, color='k', label='IRTF')
     [ax.set_ylabel(parlabel[i]) for i, ax in enumerate(baxes.flat)]
-    warm = (logt > 3.6) & (logt < np.log10(6300))
+    
+    # Ensemble figure
     simple = True
-    efig, eaxes = plot_ensemble(results[warm], wmin[warm], wmax[warm], parnames=parnames, simple=simple)
+    efig, eaxes = plot_ensemble(results[warm], wmin[warm], wmax[warm], simple=simple)
     [ax.set_ylabel(parlabel[i]) for i, ax in enumerate(eaxes.flat)]
-
-    #residual stack
-    rfig, rax = pl.subplots()
-    for  wlo in np.unique(wmin):
-        _ = residual_stack(np.array(files)[wmin == wlo], ax=rax)
+    [ax.axhline(0.0, linestyle=':', linewidth=2.0, color='k') for ax in eraxes[1:]]
+    eaxes[0].axhline(2.54, linestyle=':', linewidth=2.0, color='k', label='Beifiore')
+    [ax.set_xlim(0.39, 0.65) for ax in eaxes.flat]
+    eaxes[0].set_ylim(2, 3.5)
+    
+    # Ensemble figure in R space
+    simple = True
+    erfig, eraxes = plot_ensemble(results_R[warm, :, None], wmin[warm], wmax[warm], simple=simple)
+    eraxes[0].axhline(2000, linestyle=':', linewidth=2.0, color='k')
+    [ax.axhline(0.0, linestyle=':', linewidth=2.0, color='k') for ax in eraxes[1:]]
+    [ax.set_ylabel(p) for p, ax in zip(parlabels_R, eraxes.flat)]
+    
+    # Residual stack
+    rfig, raxes = pl.subplots(6, 2)
+    for  i, wlo in enumerate(np.unique(wmin)):
+        _ = residual_stack(np.array(files)[wmin == wlo], ax=raxes.flat[i])
 
     # Calculate deltas for atmospheric parameters
 
-    if results.shape[-1] > 4:
+    fit_starpars=False
+    if fit_starpars:
         aps = ['logt', 'feh', 'logg']
         apresults = np.array([process(f, parnames=aps) for f in files])
         delta = np.zeros_like(apresults)

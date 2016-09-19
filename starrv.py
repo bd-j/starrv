@@ -32,7 +32,7 @@ def lnprobfn(theta, model=None, sps=None, obs=None, verbose=False):
 
 
 def load_obs(starid=0, starlib='', wmin=0, wmax=np.inf,
-             noise_dilation=1, sps=None, mask_width= 4.0, **extras):
+             noise_dilation=1, sps=None, mask_width=6.0, **extras):
     """Read MILES/IRTF library
     """
     #conversion from L_sun/Hz/Lbol to maggies at 10pc
