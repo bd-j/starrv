@@ -3,6 +3,8 @@ from copy import deepcopy
 
 import numpy as np
 import matplotlib.pyplot as pl
+from matplotlib.backends.backend_pdf import PdfPages
+
 
 from plot_broad import process, get_stardat, parse_filenames, plot_one_spec
 
@@ -38,32 +40,38 @@ def plot_chi_line(linewave, w, chi, logt, logg, feh):
     return fig, axes
 
 
-def delta_par(files):
+def delta_par(files, stardata=None):
     aps = ['logt', 'feh', 'logg']
     apresults = np.array([process(f, parnames=aps) for f in files])
     delta = np.zeros_like(apresults)
     for i, p in enumerate(aps):
         delta[:,:,i] = apresults[:,:,i] - np.array([d[p] for d in stardata])[:, None]
+    return delta
 
 
 def stack_byparam(w, chi, param,  axes, return_vectors=False,
-                  parname='Par', **kwargs):
+                  parname='Par', simple=True, **kwargs):
     nsplit = len(axes.flat)
+
     op = np.argsort(param)
-    npb = len(chi) / nsplit
     inds = range(0, len(chi), len(chi) / nsplit)
     inds[-1] = len(chi)-1
-    print(inds, len(inds), len(chi))
+
+    intervals = np.linspace(param.min(), param.max(), nsplit+1)
+
     mus = []
     sigmas = []
     for i, ax in enumerate(axes.flat):
         sub = op[inds[i] : inds[i+1]]
-        lims = param[sub].min(), param[sub].max()
-        av = np.median(chi[sub, :], axis=0)
+        lo, hi = param[sub].min(), param[sub].max()
+        if simple:
+            sub =((param > intervals[i]) & (param < intervals[i+1]))
+            lo, hi = intervals[i], intervals[i+1]
+        av = np.mean(chi[sub, :], axis=0)
         sd = chi[sub, :].std(axis=0)
         ax.plot(w, av, label='mean')
         ax.plot(w, sd, label='dispersion')
-        ax.set_title('{:3.2f}<{}<{:3.2f}'.format(lims[0], parname, lims[1]))
+        ax.set_title('{:3.2f}<{}<{:3.2f}, N={}'.format(lo, parname, hi, len(param[sub])))
         mus.append(av)
         sigmas.append(sd)
 
@@ -73,9 +81,22 @@ def stack_byparam(w, chi, param,  axes, return_vectors=False,
         return axes
 
 
-def plot_delta():
-    pass
-    
+def plot_delta(delta, params=['logt', 'feh', 'logg'], filename='delta_AP.pdf'):
+    with PdfPages(filename) as pdf:
+        for j, p in enumerate(params):
+            fig, axes = pl.subplots(3, 4, figsize=(12, 9.5))
+            for i,wlo in enumerate(np.unique(wmin)):
+                axes.flat[i].hist(delta[wmin==wlo, 0, j], bins=10,
+                                histtype='stepfilled', alpha=0.3)
+                axes.flat[i].set_title('wlo={:4.2f}'.format(wlo))
+
+            fig.suptitle(r'$\Delta${}'.format(p))
+            [ax.set_xlabel(r'$\Delta${}'.format(p)) for ax in axes[-1, :]]
+            [ax.set_xticklabels('') for ax in axes[:-1, :].flat]
+            pdf.savefig(fig)
+            pl.close(fig)
+
+
 if __name__ == "__main__":
     labeltxt = "#{starid:0.0f}:{name}"
     resdir = 'results_v3_odyssey'
@@ -116,17 +137,34 @@ if __name__ == "__main__":
 
     wave, obs, model, chi =  get_dat(files)
     ratio = [o/m - 1 for o,m in zip(obs, model)]
-        
-    
-    for  i, wlo in enumerate(np.unique(wmin)):
-        sel = (wmin == wlo) & warm
-        fig, axes = pl.subplots(3, 3)
-        x = np.array(np.array(ratio)[sel].tolist())
-        # x = np.array(np.array(chi)[sel].tolist())
-        w = np.array(wave)[sel][0]
-        for j, (par, parname) in enumerate(zip([logt, feh, logg], ['logt', 'feh', 'logg'])):
-            stack_byparam(w, x, par[sel], axes[j, :], parname=parname)
-        sys.exit()
+
+    filename = 'residuals_warm.pdf'
+    simple = False
+    with PdfPages(filename) as pdf:
+        for  i, wlo in enumerate(np.unique(wmin)):
+            sel = (wmin == wlo) & warm
+            fig, axes = pl.subplots(3, 3, figsize=(18, 11.5))
+            #x, xl = np.array(np.array(ratio)[sel].tolist()), r'(o - m) / m'
+            x, xl = np.array(np.array(chi)[sel].tolist()), r'$\chi$ (obs - mod)'
+            w = np.array(wave)[sel][0]
+            for j, (par, parname) in enumerate(zip([logt, feh, logg], ['logt', 'feh', 'logg'])):
+                _ = stack_byparam(w, x, par[sel], axes[j, :], simple=simple, parname=parname)
+            axes[0,0].legend(loc=0, prop={'size':8})
+            [ax.set_ylabel(xl) for ax in axes[:, 0]]
+            [ax.set_ylim(-20, 20) for ax in axes.flat]
+            [ax.axhline(0.0, linestyle=':', linewidth=2.0, color='k') for ax in axes.flat]
+            pdf.savefig(fig)
+            pl.close(fig)
 
 
+    deltaAP = delta_par(files, stardata=stardata)
+    plot_delta(deltaAP, params=['logt', 'feh', 'logg'], filename='delta_AP.pdf')
 
+
+    nad = wmin == 0.56
+    with PdfPages('nad_residual.pdf') as pdf:
+        for i in range(nad.sum()):
+            fig, axes = plot_one_spec(np.array(files)[nad][i])
+            [ax.set_xlim(5800, 6000) for ax in axes]
+            pdf.savefig(fig)
+            pl.close(fig)
