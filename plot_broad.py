@@ -174,6 +174,30 @@ def plot_ensemble(results, wmin, wmax, simple=False, **extras):
     return fig, axes
 
 
+def write_results_h5(results, wmin, wmax, stardata, outfile='starrv_results.h5'):
+    import h5py
+    
+    rparam = ['resolution', 'velocity', 'lnC']
+    ns = len(results)
+    
+    pars = [('wmin', np.float64), ('wmax', np.float64), ('starid', np.float64), ('starname', 'S20')]
+    params = np.zeros(ns, dtype=np.dtype(pars))
+    params['wmin'] = wmin
+    params['wmax'] = wmax
+    params['starname'] = [np.str(s['name']) for s in stardata]
+    
+    cols = ['map', 'p16', 'p50', 'p84']
+    pdt = np.dtype([(c, np.float64) for c in cols]) 
+
+    with h5py.File(outfile, 'w') as f:
+        par = f.create_dataset('segment_parameters', data=params)
+        for i, p in enumerate(rparam):
+            s = np.zeros(ns, dtype=pdt)
+            for j, c in enumerate(cols):
+                s[c] = results[:, j, i]
+            dat = f.create_dataset(p, data=s)
+        
+
 if __name__ == "__main__":
     labeltxt = "#{starid:0.0f}:{name}"
     resdir = 'results_v3_odyssey'
