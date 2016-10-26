@@ -44,7 +44,7 @@ def plot_chains(filenames, outname='test.pdf', check=False, start=0.5,
                 # Check for convergence
                 raise(NotImplementedError)
 
-def plot_one_spec(filename, sps=None, return_residuals=False):
+def plot_one_spec(filename, sps=None, return_residuals=False, masked=True):
     res, pr, mod = bread.results_from(filename)
     obs = res['obs']
     if sps is None:
@@ -52,6 +52,8 @@ def plot_one_spec(filename, sps=None, return_residuals=False):
                            n_neighbors=1, **res['run_params'])
     obs.update({'filename': os.path.basename(filename)})
     w, s, u, m = obs['wavelength'], obs['spectrum'], obs['unc'], obs['mask']
+    if not masked:
+        m = slice(None)
     pn, _, best, pcts = plotting.get_stats(res, mod.theta_labels(), start=0.66)
     best_spec, _, _ = mod.mean_model(best, sps=sps, obs=obs)
     cal = mod._speccal

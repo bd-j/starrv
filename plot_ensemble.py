@@ -72,5 +72,3 @@ if __name__ == "__main__":
             rdat[c] = (wmin+wmax)* 1e4 /2.0 / rdat[c]
 
     efig, eaxes = plot_ensemble(data, wmin, wmax, simple=True, color=pl.rcParams['axes.color_cycle'][0])
-
-    
