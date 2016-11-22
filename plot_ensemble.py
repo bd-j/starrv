@@ -29,27 +29,21 @@ def summary_stats(results):
     return summary
 
 
-def plot_ensemble(data, wmin, wmax, simple=False,
+def plot_ensemble(data, wmin, wmax, simple=False, ax=None,
                   show=['resolution', 'velocity'], **extras):
 
     ind = 2 * int(simple)
-    fig, axes = pl.subplots(len(show), 1)
-    if not np.iterable(axes):
-        axes = np.array([axes])
-    # loop over parameters
-    for i, (pname, results) in enumerate(data):
-        ax = axes.flat[i]
-        # loop over segments
-        for j, wlo in enumerate(np.unique(wmin)):
-            sel = wmin == wlo
-            summary = summary_stats(results[sel])
-            whi = wmax[sel][0]
-            step([wlo], [whi], [summary[ind]],
-                 ylo=[summary[ind] - summary[ind+1]],
-                 yhi=[summary[ind] + summary[ind+1]],
-                 ax=ax, linewidth=2, **extras)
-    axes[-1].set_xlabel('$\lambda (micron)$')
-    return fig, axes
+    # loop over segments
+    for j, wlo in enumerate(np.unique(wmin)):
+        sel = wmin == wlo
+        summary = summary_stats(data[sel])
+        whi = wmax[sel][0]
+        step([wlo], [whi], [summary[ind]],
+             ylo=[summary[ind] - summary[ind+1]],
+             yhi=[summary[ind] + summary[ind+1]],
+             ax=ax, linewidth=2, **extras)
+    
+    return ax
 
 
 if __name__ == "__main__":
@@ -63,17 +57,22 @@ if __name__ == "__main__":
     params = dfile['segment_parameters'][:]
     wmin = params['wmin'][:]
     wmax = params['wmax'][:]
-    data = [(p, dfile[p][:]) for p in show]
+
     try:
         warm = (params['logt'] > 3.6) & (params['logt'] < 3.8)
     except(ValueError):
         warm = slice(None)
 
-    if plotR:
-        # convert from FWHM in AA to R
-        ind = show.index('resolution')
-        rdat = data[ind][1]
-        for c in rdat.dtype.names:
-            rdat[c] = (wmin+wmax)* 1e4 /2.0 / rdat[c]
 
-    efig, eaxes = plot_ensemble(data[warm], wmin[warm], wmax[warm], simple=True, color=pl.rcParams['axes.color_cycle'][0])
+    fig, axes = pl.subplots(len(show), 1)
+    axes = np.atleast_1d(axes)
+    for i, pname in enumerate(show):
+        data = dfile[pname][:]
+        if (pname == 'resolution') & plotR:
+            # Convert from FWHM(lambda) to approximate R value
+            for c in data.dtype.names:
+                data[c] = (wmin+wmax)* 1e4 /2.0 / data[c]
+        ax = axes.flat[i]
+        ax = plot_ensemble(data[warm], wmin[warm], wmax[warm], simple=True,
+                           ax=ax, color=pl.rcParams['axes.color_cycle'][0])
+    axes[-1].set_xlabel('$\lambda (micron)$')
