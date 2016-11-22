@@ -64,6 +64,11 @@ if __name__ == "__main__":
     wmin = params['wmin'][:]
     wmax = params['wmax'][:]
     data = [(p, dfile[p][:]) for p in show]
+    try:
+        warm = (params['logt'] > 3.6) & (params['logt'] < 3.8)
+    except(ValueError):
+        warm = slice(None)
+
     if plotR:
         # convert from FWHM in AA to R
         ind = show.index('resolution')
@@ -71,4 +76,4 @@ if __name__ == "__main__":
         for c in rdat.dtype.names:
             rdat[c] = (wmin+wmax)* 1e4 /2.0 / rdat[c]
 
-    efig, eaxes = plot_ensemble(data, wmin, wmax, simple=True, color=pl.rcParams['axes.color_cycle'][0])
+    efig, eaxes = plot_ensemble(data[warm], wmin[warm], wmax[warm], simple=True, color=pl.rcParams['axes.color_cycle'][0])

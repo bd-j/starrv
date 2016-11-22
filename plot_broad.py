@@ -176,24 +176,28 @@ def plot_ensemble(results, wmin, wmax, simple=False, **extras):
     return fig, axes
 
 
-def write_results_h5(results, wmin, wmax, stardata, outfile='starrv_results.h5'):
+def write_results_h5(results, wmin, wmax, stardata, outfile='starrv_results.h5',
+                     parnames=['resolution', 'velocity', 'lnC']):
     import h5py
     
-    rparam = ['resolution', 'velocity', 'lnC']
     ns = len(results)
     
-    pars = [('wmin', np.float64), ('wmax', np.float64), ('starid', np.float64), ('starname', 'S20')]
+    pars = [('wmin', np.float64), ('wmax', np.float64), ('starid', np.float64),
+            ('starname', 'S20'), ('logt', np.float64), ('logg', np.float64), ('feh', np.float64)]
     params = np.zeros(ns, dtype=np.dtype(pars))
     params['wmin'] = wmin
     params['wmax'] = wmax
     params['starname'] = [np.str(s['name']) for s in stardata]
+    params['logt'] = [s['logt'] for s in stardata]
+    params['logg'] = [s['logg'] for s in stardata]
+    params['feh'] = [s['feh'] for s in stardata]
     
     cols = ['map', 'p16', 'p50', 'p84']
     pdt = np.dtype([(c, np.float64) for c in cols]) 
 
     with h5py.File(outfile, 'w') as f:
         par = f.create_dataset('segment_parameters', data=params)
-        for i, p in enumerate(rparam):
+        for i, p in enumerate(parnames):
             s = np.zeros(ns, dtype=pdt)
             for j, c in enumerate(cols):
                 s[c] = results[:, j, i]
@@ -238,6 +242,9 @@ if __name__ == "__main__":
     else:
         results[:,:,0] = 1/np.sqrt( (2.355/results[:,:,0])**2 + (1.0/1e4)**2)
 
+
+    write_results_h5(results, wmin, wmax, stardata, outfile='summary_v3.h5')
+        
     # Make summary plots
     nshow = 48 #len(results)
     bfig, baxes = plot_blocks(results[:nshow], stardata[:nshow], starid[:nshow],
